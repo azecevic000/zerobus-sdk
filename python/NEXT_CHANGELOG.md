@@ -26,6 +26,11 @@
 - Added an optional `HeadersProvider.invalidate()` hook (a no-op on the base class)
   and forwarded it through the Python bridge, so a custom provider can drop cached
   auth state when the server rejects a token.
+- Added `ArrowStreamConfigurationOptions.dictionary_handling` for Arrow Flight
+  streams. `ArrowDictionaryHandling.RESEND` sends dictionary-encoded columns as
+  Arrow IPC dictionaries for the server to decode, instead of decoding them on the
+  client. The default, `ArrowDictionaryHandling.HYDRATE`, keeps the existing
+  behavior.
 
 ### Bug Fixes
 

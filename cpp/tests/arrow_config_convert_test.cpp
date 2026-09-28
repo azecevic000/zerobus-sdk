@@ -1,7 +1,8 @@
 // Covers to_c(ArrowStreamOptions)'s client-side validation and optional-field
 // handling: the stream_paused_max_wait_time_ms set-value round-trip and
-// >INT64_MAX rejection, and the max_inflight_batches == 0 rejection
-// (arrow_config_defaults_test only pins the nullopt -> -1 default).
+// >INT64_MAX rejection, the max_inflight_batches == 0 rejection, and the
+// non-default dictionary_handling mapping (arrow_config_defaults_test only pins
+// the defaults, which the FFI seed would satisfy on its own).
 
 #include <cstdint>
 #include <cstdio>
@@ -107,6 +108,17 @@ int main() {
         zerobus::detail::to_c(opts);
     if (c.max_inflight_batches != 42) {
       fail("set max_inflight_batches did not round-trip to 42");
+    }
+  }
+
+  // Resend maps to the FFI's 1; the default (0) matches the FFI seed.
+  {
+    zerobus::ArrowStreamOptions opts{};
+    opts.dictionary_handling = zerobus::ArrowDictionaryHandling::Resend;
+    const zerobus::CArrowStreamConfigurationOptions c =
+        zerobus::detail::to_c(opts);
+    if (c.dictionary_handling != 1) {
+      fail("dictionary_handling Resend did not map to 1");
     }
   }
 

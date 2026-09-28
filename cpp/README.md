@@ -248,6 +248,9 @@ stream.close();
 ```
 
 Optional LZ4/ZSTD compression is set via `ArrowStreamOptions::ipc_compression`.
+Dictionary-encoded columns are decoded on the client by default; set
+`ArrowStreamOptions::dictionary_handling` to `ArrowDictionaryHandling::Resend`
+to send the dictionaries and let the server decode them.
 
 ### Custom authentication
 
@@ -390,6 +393,7 @@ the FFI defaults.
 | `flush_timeout_ms` | `std::uint64_t` | 300,000 | Time budget for `flush()` / `close()` (ms) |
 | `connection_timeout_ms` | `std::uint64_t` | 30,000 | Connection establishment timeout (ms) |
 | `ipc_compression` | `IpcCompression` | `IpcCompression::NoCompression` | Arrow IPC compression codec (`NoCompression`, `Lz4Frame`, or `Zstd`) |
+| `dictionary_handling` | `ArrowDictionaryHandling` | `ArrowDictionaryHandling::Hydrate` | How dictionary-encoded columns are sent: `Hydrate` decodes them on the client; `Resend` sends the dictionaries for the server to decode (requires server support) |
 | `stream_paused_max_wait_time_ms` | `std::optional<std::uint64_t>` | `nullopt` | Max wait during a server-initiated pause before recovering (same semantics as above) |
 
 ## Examples

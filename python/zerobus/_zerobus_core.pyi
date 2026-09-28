@@ -672,6 +672,15 @@ class arrow:
         ZSTD: "IPCCompression"
         """Zstandard compression."""
 
+    class ArrowDictionaryHandling:
+        """How dictionary-encoded columns are sent."""
+
+        HYDRATE: "ArrowDictionaryHandling"
+        """Decode dictionary-encoded columns on the client (default)."""
+
+        RESEND: "ArrowDictionaryHandling"
+        """Send the dictionaries and let the server decode them. Requires server support."""
+
     class ArrowStreamConfigurationOptions:
         """Configuration options for Arrow Flight streams."""
 
@@ -702,6 +711,9 @@ class arrow:
         ipc_compression: "arrow.IPCCompression"
         """IPC compression codec. Default: IPCCompression.None"""
 
+        dictionary_handling: "arrow.ArrowDictionaryHandling"
+        """How dictionary-encoded columns are sent. Default: ArrowDictionaryHandling.HYDRATE"""
+
         stream_paused_max_wait_time_ms: Optional[int]
         """Maximum ACK-wait cap during server-initiated graceful rotation.
         None uses the server grace period available after reserving bounded
@@ -721,6 +733,7 @@ class arrow:
             flush_timeout_ms: int = 300000,
             connection_timeout_ms: int = 30000,
             ipc_compression: "arrow.IPCCompression" = ...,
+            dictionary_handling: "arrow.ArrowDictionaryHandling" = ...,
             stream_paused_max_wait_time_ms: Optional[int] = None,
         ) -> None: ...
         def __repr__(self) -> str: ...

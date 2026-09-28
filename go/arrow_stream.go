@@ -36,6 +36,20 @@ const (
 	IPCCompressionZstd IPCCompressionType = 3
 )
 
+// ArrowDictionaryHandling controls how dictionary-encoded columns are sent.
+// The zero value is ArrowDictionaryHydrate (default).
+type ArrowDictionaryHandling int8
+
+const (
+	// ArrowDictionaryHydrate decodes dictionary-encoded columns on the client, so the
+	// server receives plain values (default).
+	ArrowDictionaryHydrate ArrowDictionaryHandling = 0
+	// ArrowDictionaryResend sends the dictionaries and lets the server decode them,
+	// which reduces bytes on the wire when values repeat. Requires server support;
+	// otherwise stream creation fails with a schema validation error.
+	ArrowDictionaryResend ArrowDictionaryHandling = 1
+)
+
 // ArrowStreamConfigurationOptions contains configuration options for creating an Arrow Flight stream.
 type ArrowStreamConfigurationOptions struct {
 	// Maximum number of batches in-flight (pending acknowledgment) at once.
@@ -74,6 +88,10 @@ type ArrowStreamConfigurationOptions struct {
 	// Default: IPCCompressionNone
 	IPCCompression IPCCompressionType
 
+	// How dictionary-encoded columns are sent.
+	// Default: ArrowDictionaryHydrate
+	DictionaryHandling ArrowDictionaryHandling
+
 	// Maximum time in milliseconds to wait during graceful stream close.
 	// nil = wait full server duration, 0 = immediate recovery, >0 = wait up to min(this, server_duration).
 	// Default: nil (wait full server duration)
@@ -93,6 +111,7 @@ func DefaultArrowStreamConfigurationOptions() *ArrowStreamConfigurationOptions {
 		FlushTimeoutMs:           300_000,
 		ConnectionTimeoutMs:      30_000,
 		IPCCompression:           IPCCompressionNone,
+		DictionaryHandling:       ArrowDictionaryHydrate,
 	}
 }
 

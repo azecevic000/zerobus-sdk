@@ -411,3 +411,104 @@ func TestArrowStreamMultipleBatches(t *testing.T) {
 
 	t.Logf("All %d batches successfully ingested and acknowledged", len(batches))
 }
+
+// testDictArrowSchema returns a schema with one dictionary-encoded string column.
+func testDictArrowSchema() *arrow.Schema {
+	return arrow.NewSchema([]arrow.Field{{
+		Name:     "category",
+		Type:     &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int32, ValueType: arrow.BinaryTypes.String},
+		Nullable: true,
+	}}, nil)
+}
+
+// makeDictBatchIPC serialises one RecordBatch (category column) to Arrow IPC stream bytes.
+func makeDictBatchIPC(schema *arrow.Schema, categories []string) []byte {
+	bldr := array.NewDictionaryBuilder(memory.DefaultAllocator, schema.Field(0).Type.(*arrow.DictionaryType)).(*array.BinaryDictionaryBuilder)
+	defer bldr.Release()
+	for _, category := range categories {
+		if err := bldr.AppendString(category); err != nil {
+			panic(fmt.Sprintf("makeDictBatchIPC: AppendString: %v", err))
+		}
+	}
+	col := bldr.NewArray()
+	defer col.Release()
+
+	rec := array.NewRecord(schema, []arrow.Array{col}, int64(len(categories)))
+	defer rec.Release()
+
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	if err := w.Write(rec); err != nil {
+		panic(fmt.Sprintf("makeDictBatchIPC: ipc.Writer.Write: %v", err))
+	}
+	if err := w.Close(); err != nil {
+		panic(fmt.Sprintf("makeDictBatchIPC: ipc.Writer.Close: %v", err))
+	}
+	return buf.Bytes()
+}
+
+// TestArrowStreamDictionaryHandling verifies that dictionaries are hydrated by default and
+// sent as dictionary messages, without consuming offsets, with ArrowDictionaryResend.
+func TestArrowStreamDictionaryHandling(t *testing.T) {
+	// The second batch has a different dictionary, so Resend sends it again.
+	batches := [][]string{{"a", "b", "a"}, {"c"}}
+
+	for _, tc := range []struct {
+		name         string
+		handling     zerobus.ArrowDictionaryHandling
+		dictionaries int
+	}{
+		{"hydrate", zerobus.ArrowDictionaryHydrate, 0},
+		{"resend", zerobus.ArrowDictionaryResend, len(batches)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockServer, serverURL, stop, err := StartMockArrowServer()
+			if err != nil {
+				t.Fatalf("Failed to start Arrow mock server: %v", err)
+			}
+			defer stop()
+
+			sdk, err := zerobus.NewZerobusSdk(serverURL, "https://mock-uc.com")
+			if err != nil {
+				t.Fatalf("Failed to create SDK: %v", err)
+			}
+			defer sdk.Free()
+
+			schema := testDictArrowSchema()
+			opts := arrowOpts()
+			opts.DictionaryHandling = tc.handling
+			stream, err := sdk.CreateArrowStreamWithHeadersProvider(
+				arrowTestTable,
+				makeSchemaIPC(schema),
+				&TestHeadersProvider{},
+				opts,
+			)
+			if err != nil {
+				t.Fatalf("Failed to create Arrow stream: %v", err)
+			}
+			defer stream.Close()
+
+			for i, categories := range batches {
+				mockServer.ConfigureRowsForOffset(int64(i), uint64(len(categories)))
+			}
+			for i, categories := range batches {
+				if _, err := stream.IngestBatch(makeDictBatchIPC(schema, categories)); err != nil {
+					t.Fatalf("IngestBatch %d failed: %v", i, err)
+				}
+			}
+			if err := stream.Flush(); err != nil {
+				t.Fatalf("Flush failed: %v", err)
+			}
+
+			if n := mockServer.GetBatchesReceived(); n != len(batches) {
+				t.Errorf("Expected %d batches, got %d", len(batches), n)
+			}
+			if max := mockServer.GetMaxOffsetSeen(); max != int64(len(batches)-1) {
+				t.Errorf("Expected max offset %d, got %d", len(batches)-1, max)
+			}
+			if n := mockServer.GetDictionariesReceived(); n != tc.dictionaries {
+				t.Errorf("Expected %d dictionary messages, got %d", tc.dictionaries, n)
+			}
+		})
+	}
+}

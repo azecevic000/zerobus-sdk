@@ -56,6 +56,8 @@ int main() {
            from_ffi.connection_timeout_ms);
   check_eq("ipc_compression", from_cpp.ipc_compression,
            from_ffi.ipc_compression);
+  check_eq("dictionary_handling", from_cpp.dictionary_handling,
+           from_ffi.dictionary_handling);
   check_eq("stream_paused_max_wait_time_ms",
            from_cpp.stream_paused_max_wait_time_ms,
            from_ffi.stream_paused_max_wait_time_ms);

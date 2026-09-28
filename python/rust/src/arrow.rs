@@ -10,8 +10,8 @@ use pyo3::types::PyBytes;
 use tokio::sync::RwLock;
 
 use databricks_zerobus_ingest_sdk::{
-    StreamBuilder, ZerobusArrowStream as RustZerobusArrowStream, ZerobusError as RustError,
-    ZerobusSdk as RustSdk,
+    ArrowDictionaryHandling as RustArrowDictionaryHandling, StreamBuilder,
+    ZerobusArrowStream as RustZerobusArrowStream, ZerobusError as RustError, ZerobusSdk as RustSdk,
 };
 
 use crate::auth::HeadersProviderWrapper;
@@ -116,6 +116,37 @@ impl IPCCompression {
     }
 }
 
+/// How dictionary-encoded columns are sent.
+#[pyclass(from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ArrowDictionaryHandling {
+    /// Decode dictionary-encoded columns on the client (default).
+    #[pyo3(name = "HYDRATE")]
+    Hydrate = 0,
+    /// Send the dictionaries and let the server decode them.
+    #[pyo3(name = "RESEND")]
+    Resend = 1,
+}
+
+#[pymethods]
+impl ArrowDictionaryHandling {
+    fn __repr__(&self) -> &'static str {
+        match self {
+            ArrowDictionaryHandling::Hydrate => "ArrowDictionaryHandling.HYDRATE",
+            ArrowDictionaryHandling::Resend => "ArrowDictionaryHandling.RESEND",
+        }
+    }
+}
+
+impl ArrowDictionaryHandling {
+    fn to_rust(self) -> RustArrowDictionaryHandling {
+        match self {
+            ArrowDictionaryHandling::Hydrate => RustArrowDictionaryHandling::Hydrate,
+            ArrowDictionaryHandling::Resend => RustArrowDictionaryHandling::Resend,
+        }
+    }
+}
+
 /// Configuration options for Arrow Flight streams.
 ///
 #[pyclass(from_py_object)]
@@ -149,6 +180,10 @@ pub struct ArrowStreamConfigurationOptions {
     #[pyo3(get, set)]
     pub ipc_compression: IPCCompression,
 
+    /// How dictionary-encoded columns are sent. Default: ArrowDictionaryHandling.HYDRATE
+    #[pyo3(get, set)]
+    pub dictionary_handling: ArrowDictionaryHandling,
+
     /// Maximum time in milliseconds to wait during graceful stream close.
     /// None = wait full server duration, 0 = immediate recovery, >0 = wait up to min(this, server_duration).
     #[pyo3(get, set)]
@@ -170,6 +205,7 @@ impl Default for ArrowStreamConfigurationOptions {
             flush_timeout_ms: 300_000,
             connection_timeout_ms: 30_000,
             ipc_compression: IPCCompression::Uncompressed,
+            dictionary_handling: ArrowDictionaryHandling::Hydrate,
             stream_paused_max_wait_time_ms: None,
         }
     }
@@ -198,6 +234,7 @@ impl ArrowStreamConfigurationOptions {
                     "flush_timeout_ms" => options.flush_timeout_ms = value.extract()?,
                     "connection_timeout_ms" => options.connection_timeout_ms = value.extract()?,
                     "ipc_compression" => options.ipc_compression = value.extract()?,
+                    "dictionary_handling" => options.dictionary_handling = value.extract()?,
                     "stream_paused_max_wait_time_ms" => {
                         options.stream_paused_max_wait_time_ms = if value.is_none() {
                             None
@@ -223,7 +260,7 @@ impl ArrowStreamConfigurationOptions {
             "ArrowStreamConfigurationOptions(max_inflight_batches={}, recovery={}, \
              recovery_timeout_ms={}, recovery_backoff_ms={}, recovery_retries={}, \
              server_lack_of_ack_timeout_ms={}, flush_timeout_ms={}, connection_timeout_ms={}, \
-             ipc_compression={}, stream_paused_max_wait_time_ms={:?})",
+             ipc_compression={}, dictionary_handling={}, stream_paused_max_wait_time_ms={:?})",
             self.max_inflight_batches,
             self.recovery,
             self.recovery_timeout_ms,
@@ -233,6 +270,7 @@ impl ArrowStreamConfigurationOptions {
             self.flush_timeout_ms,
             self.connection_timeout_ms,
             self.ipc_compression.__repr__(),
+            self.dictionary_handling.__repr__(),
             self.stream_paused_max_wait_time_ms,
         )
     }
@@ -282,6 +320,7 @@ impl ArrowStreamConfigurationOptions {
             .flush_timeout_ms(self.flush_timeout_ms as u64)
             .connection_timeout_ms(self.connection_timeout_ms as u64)
             .ipc_compression(self.ipc_compression.to_rust())
+            .dictionary_handling(self.dictionary_handling.to_rust())
             .stream_paused_max_wait_time_ms(self.stream_paused_max_wait_time_ms.map(|v| v as u64));
         Ok(b)
     }

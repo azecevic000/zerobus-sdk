@@ -413,6 +413,22 @@ select the format but must match the inferred one, otherwise stream creation rai
 | `callback_max_wait_time_ms`      | `Optional[int]` | `5000`             | Max wait for callbacks after `close()`. `None` = wait forever                                                        |
 | `ack_callback`                   | `AckCallback`   | `None`             | Callback invoked once per successfully queued ingest submission that later acknowledges or fails                     |
 
+### Arrow Flight Dictionary Handling
+
+Arrow Flight streams take an `ArrowStreamConfigurationOptions`. By default, dictionary-encoded
+columns are decoded on the client and sent as plain values. Set
+`dictionary_handling=ArrowDictionaryHandling.RESEND` to send the dictionaries instead and let the
+server decode them, which reduces bytes on the wire when values repeat. This requires server
+support; if the server does not accept dictionary-encoded columns, stream creation raises
+`NonRetriableException`.
+
+```python
+from zerobus.sdk.shared.arrow import ArrowDictionaryHandling, ArrowStreamConfigurationOptions
+
+options = ArrowStreamConfigurationOptions(dictionary_handling=ArrowDictionaryHandling.RESEND)
+stream = sdk.create_arrow_stream("catalog.schema.table", schema, client_id, client_secret, options)
+```
+
 ## Error Handling
 
 The SDK raises two categories of exception. Handle them differently:

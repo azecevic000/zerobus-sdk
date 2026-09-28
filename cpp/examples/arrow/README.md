@@ -9,6 +9,7 @@ ingestion into Databricks Delta tables using the Zerobus C++ SDK.
 - [Running the Example](#running-the-example)
 - [Code Highlights](#code-highlights)
 - [IPC Compression](#ipc-compression)
+- [Dictionary-Encoded Columns](#dictionary-encoded-columns)
 - [Adapting for Your Custom Table](#adapting-for-your-custom-table)
 
 ## Overview
@@ -116,6 +117,26 @@ zerobus::ArrowStream stream = sdk.create_arrow_stream(
 
 `arrow_ingest.cpp` shows this as a commented-out option on
 `ArrowStreamOptions`; uncomment it to enable compression.
+
+## Dictionary-Encoded Columns
+
+By default the SDK decodes dictionary-encoded columns on the client and sends
+plain values. To send the dictionaries and let the server decode them, which
+reduces bytes on the wire when values repeat, set
+`ArrowStreamOptions::dictionary_handling`:
+
+```cpp
+zerobus::ArrowStreamOptions opts;
+opts.dictionary_handling = zerobus::ArrowDictionaryHandling::Resend;
+
+// schema_ipc declares e.g. a dictionary<int32, utf8> field for a STRING column.
+zerobus::ArrowStream stream = sdk.create_arrow_stream(
+    table_name, schema_ipc, client_id, client_secret, opts);
+```
+
+This requires server support; if the server does not accept dictionary-encoded
+columns, `create_arrow_stream` throws `zerobus::ZerobusException` from schema
+validation.
 
 ## Adapting for Your Custom Table
 

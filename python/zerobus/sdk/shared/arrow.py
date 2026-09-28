@@ -85,3 +85,4 @@ def _deserialize_batch(ipc_bytes):
 # Re-export configuration from Rust core
 ArrowStreamConfigurationOptions = _core.arrow.ArrowStreamConfigurationOptions
 IPCCompression = _core.arrow.IPCCompression
+ArrowDictionaryHandling = _core.arrow.ArrowDictionaryHandling

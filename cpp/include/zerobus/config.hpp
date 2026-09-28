@@ -115,6 +115,19 @@ enum class IpcCompression : std::int32_t {
   Zstd = 1,
 };
 
+/// How an Arrow stream sends dictionary-encoded columns. Matches the
+/// `dictionary_handling` field encoding in `CArrowStreamConfigurationOptions`
+/// (0 = Hydrate, 1 = Resend).
+enum class ArrowDictionaryHandling : std::int32_t {
+  /// Decode dictionary-encoded columns to their value type on the client, so
+  /// the server receives plain values (the default).
+  Hydrate = 0,
+  /// Send the dictionaries and let the server decode them, which reduces bytes
+  /// on the wire when values repeat. Requires server support; otherwise
+  /// `create_arrow_stream` throws `ZerobusException` (schema validation).
+  Resend = 1,
+};
+
 /// Configuration for an Arrow Flight ingestion stream.
 ///
 /// The scalar defaults below are hand-kept in sync with the Rust core and sent
@@ -139,6 +152,9 @@ struct ArrowStreamOptions {
   std::uint64_t connection_timeout_ms = 30'000;
   /// Arrow IPC compression codec.
   IpcCompression ipc_compression = IpcCompression::NoCompression;
+  /// How dictionary-encoded columns are sent (see `ArrowDictionaryHandling`).
+  ArrowDictionaryHandling dictionary_handling =
+      ArrowDictionaryHandling::Hydrate;
   /// Max wait during a server-initiated pause before recovering. `nullopt` =
   /// full server duration; `0` = recover immediately; `x` = min(x, server).
   std::optional<std::uint64_t> stream_paused_max_wait_time_ms;

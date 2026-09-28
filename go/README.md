@@ -924,10 +924,13 @@ if err := stream.Flush(); err != nil {
 | `FlushTimeoutMs` | `uint64` | 300,000 | Flush timeout (ms) |
 | `ConnectionTimeoutMs` | `uint64` | 30,000 | Connection timeout (ms) |
 | `IPCCompression` | `IPCCompressionType` | IPCCompressionNone | IPC compression codec |
+| `DictionaryHandling` | `ArrowDictionaryHandling` | ArrowDictionaryHydrate | How dictionary-encoded columns are sent |
 
 `RecoverySetting`: `RecoveryEnabled` (default), `RecoveryDisabled`
 
 `IPCCompressionType`: `IPCCompressionNone` (default), `IPCCompressionLZ4Frame`, `IPCCompressionZstd`
+
+`ArrowDictionaryHandling`: `ArrowDictionaryHydrate` (default) decodes dictionary-encoded columns on the client; `ArrowDictionaryResend` sends the dictionaries and lets the server decode them, which reduces bytes on the wire when values repeat. `ArrowDictionaryResend` requires server support; otherwise stream creation fails with a schema validation error.
 
 ```go
 opts := zerobus.DefaultArrowStreamConfigurationOptions()

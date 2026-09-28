@@ -194,3 +194,20 @@ func TestZerobusError(t *testing.T) {
 		t.Errorf("Expected 'ZerobusError: permanent error', got '%s'", errStr2)
 	}
 }
+
+func TestConvertArrowConfigToCDictionaryHandling(t *testing.T) {
+	// nil options take the FFI default, which must be Hydrate (0).
+	if got := int32(convertArrowConfigToC(nil).dictionary_handling); got != 0 {
+		t.Errorf("default dictionary_handling = %d, want 0", got)
+	}
+	for handling, want := range map[ArrowDictionaryHandling]int32{
+		ArrowDictionaryHydrate: 0,
+		ArrowDictionaryResend:  1,
+	} {
+		opts := DefaultArrowStreamConfigurationOptions()
+		opts.DictionaryHandling = handling
+		if got := int32(convertArrowConfigToC(opts).dictionary_handling); got != want {
+			t.Errorf("DictionaryHandling %d: dictionary_handling = %d, want %d", handling, got, want)
+		}
+	}
+}

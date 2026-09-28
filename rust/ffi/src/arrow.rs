@@ -12,7 +12,8 @@ use databricks_zerobus_ingest_sdk::internal::{
     mark_arrow_stream_c_data_ingested,
 };
 use databricks_zerobus_ingest_sdk::{
-    HeadersProvider, RecordBatch, StreamBuilder, ZerobusArrowStream, ZerobusError, ZerobusResult,
+    ArrowDictionaryHandling, HeadersProvider, RecordBatch, StreamBuilder, ZerobusArrowStream,
+    ZerobusError, ZerobusResult,
 };
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -40,6 +41,7 @@ pub struct CArrowStream {
 /// Configuration options for Arrow Flight streams.
 ///
 /// `ipc_compression`: -1 = None, 0 = LZ4_FRAME, 1 = ZSTD
+/// `dictionary_handling`: 0 = Hydrate, 1 = Resend
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CArrowStreamConfigurationOptions {
@@ -58,6 +60,9 @@ pub struct CArrowStreamConfigurationOptions {
     /// Bounded transport cleanup still runs with 0; very short server grace periods get a
     /// best-effort local cleanup window even if the server may already have hard-closed.
     pub stream_paused_max_wait_time_ms: i64,
+    /// How dictionary-encoded columns are sent. 0 = Hydrate (decode them on the client),
+    /// 1 = Resend (send the dictionaries for the server to decode). Other values mean 0.
+    pub dictionary_handling: i32,
 }
 
 fn c_to_compression(value: i32) -> Option<CompressionType> {
@@ -65,6 +70,13 @@ fn c_to_compression(value: i32) -> Option<CompressionType> {
         0 => Some(CompressionType::LZ4_FRAME),
         1 => Some(CompressionType::ZSTD),
         _ => None,
+    }
+}
+
+fn c_to_dictionary_handling(value: i32) -> ArrowDictionaryHandling {
+    match value {
+        1 => ArrowDictionaryHandling::Resend,
+        _ => ArrowDictionaryHandling::Hydrate,
     }
 }
 
@@ -154,6 +166,7 @@ fn apply_c_arrow_stream_options<'a>(
         .connection_timeout_ms(c.connection_timeout_ms)
         .ipc_compression(c_to_compression(c.ipc_compression))
         .stream_paused_max_wait_time_ms(c_to_stream_paused_ms(c.stream_paused_max_wait_time_ms))
+        .dictionary_handling(c_to_dictionary_handling(c.dictionary_handling))
 }
 
 // ---- Arrow FFI functions ----
@@ -867,5 +880,6 @@ pub extern "C" fn zerobus_arrow_get_default_config() -> CArrowStreamConfiguratio
         connection_timeout_ms: defaults::CONNECTION_TIMEOUT_MS,
         ipc_compression: -1,
         stream_paused_max_wait_time_ms: -1,
+        dictionary_handling: 0,
     }
 }

@@ -13,6 +13,7 @@ import pytest
 pa = pytest.importorskip("pyarrow")
 
 from zerobus.sdk.shared.arrow import (
+    ArrowDictionaryHandling,
     ArrowStreamConfigurationOptions,
     IPCCompression,
     _check_pyarrow,
@@ -180,6 +181,7 @@ class TestArrowStreamConfigurationOptions(unittest.TestCase):
         self.assertIsInstance(options.flush_timeout_ms, int)
         self.assertIsInstance(options.connection_timeout_ms, int)
         self.assertEqual(options.ipc_compression, IPCCompression.NONE)
+        self.assertEqual(options.dictionary_handling, ArrowDictionaryHandling.HYDRATE)
         self.assertIsNone(options.stream_paused_max_wait_time_ms)
 
     def test_kwargs_construction(self):
@@ -255,6 +257,26 @@ class TestArrowStreamConfigurationOptions(unittest.TestCase):
         with self.assertRaises(TypeError):
             ArrowStreamConfigurationOptions(ipc_compression="lz4_frame")
 
+    def test_dictionary_handling_resend(self):
+        options = ArrowStreamConfigurationOptions(dictionary_handling=ArrowDictionaryHandling.RESEND)
+        self.assertEqual(options.dictionary_handling, ArrowDictionaryHandling.RESEND)
+
+    def test_dictionary_handling_setter(self):
+        options = ArrowStreamConfigurationOptions()
+        options.dictionary_handling = ArrowDictionaryHandling.RESEND
+        self.assertEqual(options.dictionary_handling, ArrowDictionaryHandling.RESEND)
+        options.dictionary_handling = ArrowDictionaryHandling.HYDRATE
+        self.assertEqual(options.dictionary_handling, ArrowDictionaryHandling.HYDRATE)
+
+    def test_dictionary_handling_invalid_type_rejected(self):
+        """Invalid types are rejected at construction time."""
+        with self.assertRaises(TypeError):
+            ArrowStreamConfigurationOptions(dictionary_handling="resend")
+
+    def test_dictionary_handling_repr(self):
+        self.assertEqual(repr(ArrowDictionaryHandling.HYDRATE), "ArrowDictionaryHandling.HYDRATE")
+        self.assertEqual(repr(ArrowDictionaryHandling.RESEND), "ArrowDictionaryHandling.RESEND")
+
     def test_repr(self):
         options = ArrowStreamConfigurationOptions()
         repr_str = repr(options)
@@ -262,6 +284,7 @@ class TestArrowStreamConfigurationOptions(unittest.TestCase):
         self.assertIn("max_inflight_batches", repr_str)
         self.assertIn("recovery", repr_str)
         self.assertIn("ipc_compression", repr_str)
+        self.assertIn("dictionary_handling=ArrowDictionaryHandling.HYDRATE", repr_str)
         self.assertIn("stream_paused_max_wait_time_ms", repr_str)
 
 

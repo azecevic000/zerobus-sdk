@@ -43,6 +43,7 @@ typedef struct CArrowStream { uint8_t _private[0]; } CArrowStream;
 
 // Arrow stream configuration options.
 // ipc_compression: -1 = None, 0 = LZ4_FRAME, 1 = ZSTD
+// dictionary_handling: 0 = Hydrate, 1 = Resend
 typedef struct CArrowStreamConfigurationOptions {
     uintptr_t max_inflight_batches;
     bool      recovery;
@@ -54,6 +55,7 @@ typedef struct CArrowStreamConfigurationOptions {
     uint64_t  connection_timeout_ms;
     int32_t   ipc_compression;
     int64_t   stream_paused_max_wait_time_ms;
+    int32_t   dictionary_handling;
 } CArrowStreamConfigurationOptions;
 
 // Array of Arrow IPC-encoded batches returned by get_unacked_batches.
@@ -207,6 +209,15 @@ func convertArrowConfigToC(opts *ArrowStreamConfigurationOptions) C.CArrowStream
 		ipcCompression = -1
 	}
 
+	// Map Go ArrowDictionaryHandling to the C wire values: 0=Hydrate, 1=Resend.
+	var dictionaryHandling int32
+	switch opts.DictionaryHandling {
+	case ArrowDictionaryResend:
+		dictionaryHandling = 1
+	default: // ArrowDictionaryHydrate
+		dictionaryHandling = 0
+	}
+
 	// Map Go stream_paused_max_wait_time_ms: nil → -1 (wait full server duration).
 	var streamPausedMaxWait int64 = -1
 	if opts.StreamPausedMaxWaitTimeMs != nil {
@@ -224,6 +235,7 @@ func convertArrowConfigToC(opts *ArrowStreamConfigurationOptions) C.CArrowStream
 		connection_timeout_ms:          C.uint64_t(connTimeout),
 		ipc_compression:                C.int32_t(ipcCompression),
 		stream_paused_max_wait_time_ms: C.int64_t(streamPausedMaxWait),
+		dictionary_handling:            C.int32_t(dictionaryHandling),
 	}
 }
 

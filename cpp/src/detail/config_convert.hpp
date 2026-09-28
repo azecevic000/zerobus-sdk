@@ -80,6 +80,7 @@ inline CArrowStreamConfigurationOptions to_c(const ArrowStreamOptions& opts) {
   c.flush_timeout_ms = opts.flush_timeout_ms;
   c.connection_timeout_ms = opts.connection_timeout_ms;
   c.ipc_compression = static_cast<std::int32_t>(opts.ipc_compression);
+  c.dictionary_handling = static_cast<std::int32_t>(opts.dictionary_handling);
   // `nullopt` maps to the -1 sentinel ("full server duration"). Reject values
   // above INT64_MAX so they can't wrap to a negative int64 and be misread as
   // -1.

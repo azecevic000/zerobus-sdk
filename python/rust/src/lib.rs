@@ -51,6 +51,7 @@ fn _zerobus_core(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Add arrow submodule
     let arrow_module = PyModule::new(py, "arrow")?;
     arrow_module.add_class::<arrow::IPCCompression>()?;
+    arrow_module.add_class::<arrow::ArrowDictionaryHandling>()?;
     arrow_module.add_class::<arrow::ArrowStreamConfigurationOptions>()?;
     arrow_module.add_class::<arrow::ZerobusArrowStream>()?;
     arrow_module.add_class::<arrow::AsyncZerobusArrowStream>()?;

@@ -362,6 +362,15 @@ fn test_get_default_config() {
 }
 
 #[test]
+fn test_arrow_default_config_hydrates_dictionaries() {
+    // 0 (Hydrate) is also what a zero-initialized struct gets.
+    assert_eq!(
+        crate::zerobus_arrow_get_default_config().dictionary_handling,
+        0
+    );
+}
+
+#[test]
 fn test_create_stream_retryable_error_sets_retryable_flag() {
     // Build an SDK that points to an unreachable local endpoint so stream
     // creation fails with a retryable transport/setup error.

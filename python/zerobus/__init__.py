@@ -55,7 +55,7 @@ Example (Async):
 
 # Import from Rust core
 import zerobus._zerobus_core as _core
-from zerobus.sdk.shared.arrow import ArrowStreamConfigurationOptions, IPCCompression
+from zerobus.sdk.shared.arrow import ArrowDictionaryHandling, ArrowStreamConfigurationOptions, IPCCompression
 from zerobus.sdk.shared.auth import FederatedToken
 from zerobus.sdk.sync import ZerobusArrowStream, ZerobusSdk, ZerobusStream
 
@@ -79,6 +79,7 @@ __all__ = [
     "ZerobusArrowStream",
     "ArrowStreamConfigurationOptions",
     "IPCCompression",
+    "ArrowDictionaryHandling",
     "RecordAcknowledgment",
     # Common types
     "TableProperties",

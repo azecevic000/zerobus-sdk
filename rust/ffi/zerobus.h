@@ -53,6 +53,7 @@ typedef struct CZerobusSdk {
  * Configuration options for Arrow Flight streams.
  *
  * `ipc_compression`: -1 = None, 0 = LZ4_FRAME, 1 = ZSTD
+ * `dictionary_handling`: 0 = Hydrate, 1 = Resend
  */
 typedef struct CArrowStreamConfigurationOptions {
   uintptr_t max_inflight_batches;
@@ -74,6 +75,11 @@ typedef struct CArrowStreamConfigurationOptions {
    * best-effort local cleanup window even if the server may already have hard-closed.
    */
   int64_t stream_paused_max_wait_time_ms;
+  /**
+   * How dictionary-encoded columns are sent. 0 = Hydrate (decode them on the client),
+   * 1 = Resend (send the dictionaries for the server to decode). Other values mean 0.
+   */
+  int32_t dictionary_handling;
 } CArrowStreamConfigurationOptions;
 
 typedef struct CResult {

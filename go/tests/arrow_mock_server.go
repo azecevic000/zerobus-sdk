@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/flight"
+	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -29,12 +31,13 @@ type arrowAckMeta struct {
 type MockArrowFlightServer struct {
 	flight.BaseFlightServer
 
-	mu              sync.Mutex
-	rowsPerOffset   map[int64]uint64 // configured rows for each logical offset
-	defaultRows     uint64           // fallback when offset not configured
-	batchesReceived int
-	maxOffsetSeen   int64
-	lastUserAgent   string
+	mu                   sync.Mutex
+	rowsPerOffset        map[int64]uint64 // configured rows for each logical offset
+	defaultRows          uint64           // fallback when offset not configured
+	batchesReceived      int
+	dictionariesReceived int
+	maxOffsetSeen        int64
+	lastUserAgent        string
 }
 
 // NewMockArrowFlightServer creates a server with defaultRows=1.
@@ -67,6 +70,13 @@ func (s *MockArrowFlightServer) GetBatchesReceived() int {
 	return s.batchesReceived
 }
 
+// GetDictionariesReceived returns the number of dictionary messages received.
+func (s *MockArrowFlightServer) GetDictionariesReceived() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dictionariesReceived
+}
+
 // GetMaxOffsetSeen returns the highest logical offset received so far.
 func (s *MockArrowFlightServer) GetMaxOffsetSeen() int64 {
 	s.mu.Lock()
@@ -88,6 +98,7 @@ func (s *MockArrowFlightServer) ArrowReset() {
 	s.rowsPerOffset = make(map[int64]uint64)
 	s.defaultRows = 1
 	s.batchesReceived = 0
+	s.dictionariesReceived = 0
 	s.maxOffsetSeen = -1
 	s.lastUserAgent = ""
 }
@@ -96,7 +107,8 @@ func (s *MockArrowFlightServer) ArrowReset() {
 //  1. Reads the schema FlightData (first message, no AppMetadata).
 //  2. Sends the stream-ready ack {"ack_up_to_offset":-1,"ack_up_to_records":0}.
 //  3. For each subsequent data FlightData, reads offset_id from AppMetadata,
-//     accumulates the configured row count, and sends an ack.
+//     accumulates the configured row count, and sends an ack. Like the server,
+//     it counts dictionary messages without reading an offset from them.
 func (s *MockArrowFlightServer) DoPut(stream flight.FlightService_DoPutServer) error {
 	if incoming, ok := metadata.FromIncomingContext(stream.Context()); ok {
 		if values := incoming.Get("user-agent"); len(values) > 0 {
@@ -127,6 +139,13 @@ func (s *MockArrowFlightServer) DoPut(stream flight.FlightService_DoPutServer) e
 			return err
 		}
 
+		if isDictionaryMessage(data) {
+			s.mu.Lock()
+			s.dictionariesReceived++
+			s.mu.Unlock()
+			continue
+		}
+
 		var meta arrowBatchMeta
 		if err := json.Unmarshal(data.AppMetadata, &meta); err != nil {
 			return fmt.Errorf("arrow mock: invalid batch AppMetadata: %w", err)
@@ -153,6 +172,16 @@ func (s *MockArrowFlightServer) DoPut(stream flight.FlightService_DoPutServer) e
 			return err
 		}
 	}
+}
+
+// isDictionaryMessage reports whether data carries an IPC dictionary batch.
+func isDictionaryMessage(data *flight.FlightData) bool {
+	if len(data.DataHeader) == 0 {
+		return false
+	}
+	msg := ipc.NewMessage(memory.NewBufferBytes(data.DataHeader), memory.NewBufferBytes(data.DataBody))
+	defer msg.Release()
+	return msg.Type() == ipc.MessageDictionaryBatch
 }
 
 // StartMockArrowServer creates and starts a mock Arrow Flight gRPC server on a

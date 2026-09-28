@@ -47,7 +47,8 @@ use multiplexed::MAX_MULTIPLEXED_JITTER_MS;
 
 #[cfg(feature = "arrow-flight")]
 use crate::stream::{
-    ArrowSchema, ArrowStreamConfigurationOptions, ArrowTableProperties, ZerobusArrowStream,
+    ArrowDictionaryHandling, ArrowSchema, ArrowStreamConfigurationOptions, ArrowTableProperties,
+    ZerobusArrowStream,
 };
 
 /// Internal representation of the authentication configuration.
@@ -513,6 +514,15 @@ impl<'a> StreamBuilder<'a> {
     #[cfg(feature = "arrow-flight")]
     pub fn ipc_compression(mut self, compression: Option<arrow_ipc::CompressionType>) -> Self {
         self.arrow_config.ipc_compression = compression;
+        self
+    }
+
+    /// Set how dictionary-encoded columns are sent (Arrow streams only).
+    ///
+    /// See [`ArrowDictionaryHandling`] for the modes; the default is `Hydrate`.
+    #[cfg(feature = "arrow-flight")]
+    pub fn dictionary_handling(mut self, handling: ArrowDictionaryHandling) -> Self {
+        self.arrow_config.dictionary_handling = handling;
         self
     }
 

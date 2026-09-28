@@ -3,6 +3,31 @@
 use crate::stream_options::defaults;
 use arrow_ipc::CompressionType;
 
+/// How an Arrow Flight stream sends dictionary-encoded columns.
+///
+/// Configure it with
+/// [`StreamBuilder::dictionary_handling`](crate::StreamBuilder::dictionary_handling).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ArrowDictionaryHandling {
+    /// Decode dictionary-encoded columns to their value type before sending, so the
+    /// server receives plain values.
+    #[default]
+    Hydrate,
+
+    /// Send dictionary-encoded columns as Arrow IPC dictionaries and let the server
+    /// decode them.
+    ///
+    /// Each connection sends a column's dictionary before the first batch that uses
+    /// it and again whenever it changes. This reduces bytes on the wire when values
+    /// repeat.
+    ///
+    /// Requires server support. If the server does not accept dictionary-encoded
+    /// columns, stream creation fails with
+    /// [`ZerobusError::InvalidSchema`](crate::ZerobusError::InvalidSchema).
+    Resend,
+}
+
 /// Configuration options for Arrow Flight stream creation and operation.
 ///
 /// These options control the behavior of Arrow Flight ingestion streams, including
@@ -111,6 +136,11 @@ pub struct ArrowStreamConfigurationOptions {
     /// Default: `None`
     pub ipc_compression: Option<CompressionType>,
 
+    /// How dictionary-encoded columns are sent. See [`ArrowDictionaryHandling`].
+    ///
+    /// Default: [`ArrowDictionaryHandling::Hydrate`]
+    pub dictionary_handling: ArrowDictionaryHandling,
+
     /// Maximum time in milliseconds to wait for acknowledgments during server-initiated
     /// graceful stream rotation.
     ///
@@ -161,6 +191,7 @@ impl Default for ArrowStreamConfigurationOptions {
             flush_timeout_ms: defaults::FLUSH_TIMEOUT_MS,
             connection_timeout_ms: defaults::CONNECTION_TIMEOUT_MS,
             ipc_compression: None,
+            dictionary_handling: ArrowDictionaryHandling::Hydrate,
             stream_paused_max_wait_time_ms: None,
         }
     }

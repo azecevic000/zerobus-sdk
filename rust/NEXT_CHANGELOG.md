@@ -6,6 +6,10 @@
 
 ### New Features and Improvements
 
+- Added `StreamBuilder::dictionary_handling(ArrowDictionaryHandling)` for Arrow
+  Flight streams. `ArrowDictionaryHandling::Resend` sends dictionary-encoded
+  columns as Arrow IPC dictionaries for the server to decode, instead of decoding
+  them on the client. The default, `Hydrate`, keeps the existing behavior.
 - Added Avro support to `StreamBuilder::multiplexed(n)` (Beta) when the `avro`
   feature is enabled; every lane shares the configured writer schema.
 - Added first-class external-IdP token federation (`FederatedTokenProvider`,

@@ -507,9 +507,12 @@ impl FlightService for MockFlightServer {
                     }
                 }
 
-                // Parse batch metadata
+                // Parse batch metadata. Like the server, read offsets only from record
+                // batches; dictionary messages are not numbered.
                 let metadata: Option<FlightBatchMetadata> =
-                    serde_json::from_slice(&flight_data.app_metadata).ok();
+                    serde_json::from_slice(&flight_data.app_metadata)
+                        .ok()
+                        .filter(|_| observation.record_batch_messages > 0);
 
                 if let Some(metadata) = &metadata {
                     debug!("Received batch with offset_id: {}", metadata.offset_id);

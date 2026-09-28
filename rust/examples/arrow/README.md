@@ -11,6 +11,7 @@ The `arrow-flight` feature flag must be enabled.
 - [Code Highlights](#code-highlights)
 - [Telemetry](#telemetry)
 - [IPC compression](#ipc-compression)
+- [Dictionary-encoded columns](#dictionary-encoded-columns)
 - [Adapting for Your Custom Table](#adapting-for-your-custom-table)
 
 ## Overview
@@ -149,6 +150,25 @@ let stream = sdk
 - `ZSTD` — higher compression ratio, more CPU per batch.
 
 To disable compression, drop the `.ipc_compression(...)` call (default is `None`).
+
+## Dictionary-encoded columns
+
+By default the SDK decodes dictionary-encoded columns on the client and sends plain values. To send the dictionaries and let the server decode them, which reduces bytes on the wire when values repeat:
+
+```rust
+use databricks_zerobus_ingest_sdk::ArrowDictionaryHandling;
+
+let stream = sdk
+    .stream_builder()
+    .table(TABLE_NAME)
+    .oauth(DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET)
+    .arrow(schema)  // e.g. a Dictionary(Int32, Utf8) field for a STRING column
+    .dictionary_handling(ArrowDictionaryHandling::Resend)
+    .build_arrow()
+    .await?;
+```
+
+This requires server support; if the server does not accept dictionary-encoded columns, `build_arrow()` fails with `ZerobusError::InvalidSchema`.
 
 ## Adapting for Your Custom Table
 

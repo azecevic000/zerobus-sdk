@@ -1111,6 +1111,7 @@ shared multiplexing is recommended there to reduce connection overhead.
 | `flush_timeout_ms` | `u64` | 300,000 | Timeout for `flush()`, `wait_for_offset()`, and the explicit-close acknowledgment wait |
 | `connection_timeout_ms` | `u64` | 30,000 | Timeout for Flight connection establishment |
 | `ipc_compression` | `Option<CompressionType>` | `None` | Optional `LZ4_FRAME` or `ZSTD` Arrow IPC compression |
+| `dictionary_handling` | `ArrowDictionaryHandling` | `Hydrate` | `Hydrate` decodes dictionary-encoded columns on the client; `Resend` sends the dictionaries for the server to decode |
 | `stream_paused_max_wait_time_ms` | `Option<u64>` | `None` | ACK-wait cap during server rotation; `None` uses the available server grace, while `Some(0)` skips ACK waiting but not bounded transport cleanup |
 
 ```rust
@@ -1125,6 +1126,14 @@ let stream = sdk
     .build_arrow()
     .await?;
 ```
+
+By default, dictionary-encoded columns are decoded on the client and sent as
+plain values. `.dictionary_handling(ArrowDictionaryHandling::Resend)` sends the
+dictionaries instead and lets the server decode them, which reduces bytes on the
+wire when values repeat. Each connection sends a column's dictionary before the
+first batch that uses it and again whenever it changes. This requires server
+support; if the server does not accept dictionary-encoded columns, stream
+creation fails with `ZerobusError::InvalidSchema`.
 
 For Arrow Flight streams, `server_lack_of_ack_timeout_ms` is an
 absolute limit on how long the oldest batch may remain pending during normal

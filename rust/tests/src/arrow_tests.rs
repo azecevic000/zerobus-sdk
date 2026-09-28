@@ -5996,6 +5996,7 @@ mod arrow_flight_tests {
 
     mod dictionary_tests {
         use super::*;
+        use databricks_zerobus_ingest_sdk::ArrowDictionaryHandling;
 
         #[tokio::test]
         async fn test_ingest_dict_batch() -> Result<(), Box<dyn std::error::Error>> {
@@ -6039,8 +6040,7 @@ mod arrow_flight_tests {
             let offset = stream.ingest_batch(batch).await?;
             stream.wait_for_offset(offset).await?;
 
-            // The mock server should have received dictionary + batch messages.
-            // get_batch_count counts FlightData messages after schema, so dictionaries count.
+            // get_batch_count counts record-batch messages, not dictionary messages.
             assert!(mock_server.get_batch_count().await >= 1);
 
             Ok(())
@@ -6160,6 +6160,132 @@ mod arrow_flight_tests {
                 ]],
                 "hydrated dictionary payload must preserve logical values",
             );
+
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn test_resend_dictionaries() -> Result<(), Box<dyn std::error::Error>> {
+            setup_tracing();
+            info!("Starting test_resend_dictionaries");
+
+            let (mock_server, server_url) = start_mock_flight_server().await?;
+            let schema = create_test_dict_schema();
+
+            mock_server
+                .inject_responses(
+                    TABLE_NAME,
+                    vec![MockFlightResponse::BatchAck {
+                        ack_up_to_offset: 1,
+                        delay_ms: 0,
+                        ack_up_to_records: 5,
+                    }],
+                )
+                .await;
+
+            let sdk = ZerobusSdk::builder()
+                .endpoint(server_url.clone())
+                .unity_catalog_url("https://mock-uc.com")
+                .tls_config(Arc::new(NoTlsConfig))
+                .build()?;
+
+            let stream = sdk
+                .stream_builder()
+                .table(TABLE_NAME)
+                .headers_provider(Arc::new(TestHeadersProvider::default()))
+                .arrow(schema.clone())
+                .dictionary_handling(ArrowDictionaryHandling::Resend)
+                .build_arrow()
+                .await?;
+
+            // The second batch has a different dictionary, so it is sent again.
+            let batches = [
+                create_test_dict_record_batch(
+                    schema.clone(),
+                    vec![1, 2, 3],
+                    vec![Some("cat_a"), Some("cat_b"), Some("cat_a")],
+                ),
+                create_test_dict_record_batch(schema, vec![4, 5], vec![Some("cat_c"), None]),
+            ];
+            for batch in batches {
+                stream.ingest_batch(batch).await?;
+            }
+            stream.flush().await?;
+
+            assert!(
+                mock_server.wire_ipc_schema_has_dictionary_encoding().await,
+                "schema message must keep the dictionary encoding",
+            );
+            assert_eq!(mock_server.get_dictionary_message_count().await, 2);
+            // The mock rejects record batches whose offsets skip a number.
+            assert_eq!(mock_server.get_record_batch_message_count().await, 2);
+            assert_eq!(mock_server.get_total_records_received().await, 5);
+
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn test_resend_dictionaries_after_reconnect() -> Result<(), Box<dyn std::error::Error>>
+        {
+            setup_tracing();
+            info!("Starting test_resend_dictionaries_after_reconnect");
+
+            let (mock_server, server_url) = start_mock_flight_server().await?;
+            let schema = create_test_dict_schema();
+
+            mock_server
+                .inject_responses(
+                    TABLE_NAME,
+                    vec![
+                        MockFlightResponse::BatchAck {
+                            ack_up_to_offset: 0,
+                            delay_ms: 0,
+                            ack_up_to_records: 1,
+                        },
+                        MockFlightResponse::Error {
+                            status: tonic::Status::unavailable("Temporary network issue"),
+                            delay_ms: 0,
+                        },
+                        MockFlightResponse::BatchAck {
+                            ack_up_to_offset: 0,
+                            delay_ms: 0,
+                            ack_up_to_records: 1,
+                        },
+                    ],
+                )
+                .await;
+
+            let sdk = ZerobusSdk::builder()
+                .endpoint(server_url.clone())
+                .unity_catalog_url("https://mock-uc.com")
+                .tls_config(Arc::new(NoTlsConfig))
+                .build()?;
+
+            let stream = sdk
+                .stream_builder()
+                .table(TABLE_NAME)
+                .headers_provider(Arc::new(TestHeadersProvider::default()))
+                .arrow(schema.clone())
+                .dictionary_handling(ArrowDictionaryHandling::Resend)
+                .recovery(true)
+                .recovery_timeout_ms(5000)
+                .recovery_backoff_ms(100)
+                .recovery_retries(3)
+                .build_arrow()
+                .await?;
+
+            // Both batches share one dictionary, so the first connection sends it once.
+            // The mock acks the first batch and fails on the second.
+            for id in [1, 2] {
+                let batch =
+                    create_test_dict_record_batch(schema.clone(), vec![id], vec![Some("cat_a")]);
+                stream.ingest_batch(batch).await?;
+            }
+            stream.flush().await?;
+
+            // The replacement connection sends the dictionary again before the replay.
+            assert_eq!(mock_server.get_dictionary_message_count().await, 2);
+            assert_eq!(mock_server.get_record_batch_message_count().await, 3);
 
             Ok(())
         }

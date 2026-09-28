@@ -23,6 +23,7 @@ ZerobusArrowStream::ingest_batch
 FlightDataEncoder
     |
     +-- schema message
+    +-- dictionary messages (`ArrowDictionaryHandling::Resend` only)
     +-- one or more physical RecordBatch messages
     |
     v
@@ -84,9 +85,13 @@ renumbered from zero when pending work is rebuilt for replay.
 `FlightData` record-batch messages. Each physical message receives a sequential,
 connection-local wire offset in `FlightBatchMetadata`.
 
-The first Flight message is the schema and carries no batch offset. Dictionary
-arrays use Arrow Flight's default `DictionaryHandling::Hydrate`, so dictionary
-values are expanded and do not introduce dictionary side messages.
+The first Flight message is the schema and carries no batch offset. With the
+default `ArrowDictionaryHandling::Hydrate`, dictionary arrays are expanded to
+their value type, so no dictionary messages are sent. With
+`ArrowDictionaryHandling::Resend`, the encoder sends a dictionary message before
+the first record batch that uses a dictionary on each connection and again
+whenever it changes. The server numbers only record-batch messages, so dictionary
+messages carry no wire offset.
 
 The server's `ack_up_to_offset` describes the physical Flight sequence. The SDK
 does not use that value to complete caller offsets. Completion is derived from
